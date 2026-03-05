@@ -46,7 +46,7 @@ htmlcov/
 *.xls
 *.csv
 !docs/*.xlsx
-!docs/*.csv
+!docs/*.xls
 
 # OS
 .DS_Store
