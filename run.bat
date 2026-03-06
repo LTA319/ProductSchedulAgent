@@ -55,6 +55,9 @@ if errorlevel 1 (
     echo.
 )
 
+REM 设置 PYTHONPATH 为项目根目录
+set PYTHONPATH=%CD%
+
 REM 启动应用
 echo [信息] 启动 Web 应用...
 echo [提示] 浏览器将自动打开 http://localhost:8501

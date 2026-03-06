@@ -499,16 +499,18 @@ def main():
             
             try:
                 # 生成 Excel 文件
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                    visualizer = Visualizer()
-                    visualizer.export_schedule_to_excel(st.session_state.schedule_result, tmp_file.name)
-                    
-                    # 读取文件内容
-                    with open(tmp_file.name, 'rb') as f:
-                        excel_data = f.read()
-                    
-                    # 删除临时文件
-                    os.unlink(tmp_file.name)
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+                tmp_file.close()  # 关闭文件句柄，Windows 需要这样做
+                
+                visualizer = Visualizer()
+                visualizer.export_schedule_to_excel(st.session_state.schedule_result, tmp_file.name)
+                
+                # 读取文件内容
+                with open(tmp_file.name, 'rb') as f:
+                    excel_data = f.read()
+                
+                # 删除临时文件
+                os.unlink(tmp_file.name)
                 
                 # 提供下载按钮
                 st.download_button(
@@ -529,16 +531,18 @@ def main():
             
             try:
                 # 生成 CSV 文件
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w', encoding='utf-8-sig') as tmp_file:
-                    visualizer = Visualizer()
-                    visualizer.export_schedule_to_csv(st.session_state.schedule_result, tmp_file.name)
-                    
-                    # 读取文件内容
-                    with open(tmp_file.name, 'r', encoding='utf-8-sig') as f:
-                        csv_data = f.read()
-                    
-                    # 删除临时文件
-                    os.unlink(tmp_file.name)
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w', encoding='utf-8-sig')
+                tmp_file.close()  # 关闭文件句柄，Windows 需要这样做
+                
+                visualizer = Visualizer()
+                visualizer.export_schedule_to_csv(st.session_state.schedule_result, tmp_file.name)
+                
+                # 读取文件内容
+                with open(tmp_file.name, 'r', encoding='utf-8-sig') as f:
+                    csv_data = f.read()
+                
+                # 删除临时文件
+                os.unlink(tmp_file.name)
                 
                 # 提供下载按钮
                 st.download_button(
