@@ -28,36 +28,49 @@ class Visualizer:
         for equip in self.equipment_list:
             self.equipment_daily_capacity[equip.equipment_id] = equip.capacity
     
-    def _work_hours_to_datetime(self, work_hours: float, equipment_id: str, base_date: datetime) -> datetime:
+    def _split_operation_by_days(self, op, equipment_id: str, base_date: datetime):
         """
-        将工作小时转换为实际日期时间（考虑每日工作时长，跳过非工作时间）
+        将跨天的工序拆分为多个每日片段
         
         Args:
-            work_hours: 累计工作小时数
+            op: ScheduledOperation 对象
             equipment_id: 设备编号
-            base_date: 基准日期（排程开始日期）
+            base_date: 基准日期
             
         Returns:
-            实际日期时间
+            拆分后的片段列表 [(start_datetime, end_datetime), ...]
         """
-        # 获取设备每日工作时长（小时）
         daily_capacity_hours = self.equipment_daily_capacity.get(equipment_id, 8.0)
-        
-        # 计算是第几个工作日（从0开始）
-        work_day = int(work_hours / daily_capacity_hours)
-        
-        # 计算当天的工作小时数（余数）
-        hours_in_day = work_hours % daily_capacity_hours
-        
-        # 假设每天从 8:00 开始工作
         work_start_hour = 8
         
-        # 计算实际日期时间
-        result_date = base_date + timedelta(days=work_day)
-        result_datetime = result_date.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
-        result_datetime += timedelta(hours=hours_in_day)
+        segments = []
+        current_work_hours = op.start_time
+        remaining_hours = op.duration
         
-        return result_datetime
+        while remaining_hours > 0:
+            # 计算当前在第几天
+            current_day = int(current_work_hours / daily_capacity_hours)
+            # 计算当天已经使用的工作小时
+            hours_used_today = current_work_hours % daily_capacity_hours
+            # 计算当天还剩多少工作时间
+            hours_left_today = daily_capacity_hours - hours_used_today
+            
+            # 本次片段的工作时长
+            segment_duration = min(remaining_hours, hours_left_today)
+            
+            # 计算实际日期时间
+            segment_date = base_date + timedelta(days=current_day)
+            segment_start = segment_date.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
+            segment_start += timedelta(hours=hours_used_today)
+            segment_end = segment_start + timedelta(hours=segment_duration)
+            
+            segments.append((segment_start, segment_end))
+            
+            # 更新剩余时间和当前位置
+            remaining_hours -= segment_duration
+            current_work_hours += segment_duration
+        
+        return segments
     
     def generate_gantt_chart(self, schedule: ScheduleResult):
         """
@@ -101,21 +114,28 @@ class Visualizer:
         
         # 构建甘特图数据，并为每个Resource分配颜色
         colors = {}
+        segment_counter = {}  # 用于为同一工序的不同片段生成唯一ID
+        
         for op in schedule.operations:
-            resource_key = f"{op.order_id}-{op.operation_id}"
+            # 将跨天工序拆分为多个每日片段
+            segments = self._split_operation_by_days(op, op.equipment_id, base_date)
             
-            # 将工作小时转换为实际日期时间（考虑每日工作时长）
-            start_datetime = self._work_hours_to_datetime(op.start_time, op.equipment_id, base_date)
-            end_datetime = self._work_hours_to_datetime(op.end_time, op.equipment_id, base_date)
-            
-            df_data.append(dict(
-                Task=op.equipment_id,
-                Start=start_datetime,
-                Finish=end_datetime,
-                Resource=resource_key
-            ))
-            # 为每个Resource分配对应订单的颜色
-            colors[resource_key] = order_to_color[op.order_id]
+            # 为每个片段创建甘特图条目
+            for idx, (start_datetime, end_datetime) in enumerate(segments):
+                # 为每个片段生成唯一的 resource_key
+                if len(segments) > 1:
+                    resource_key = f"{op.order_id}-{op.operation_id}-day{idx+1}"
+                else:
+                    resource_key = f"{op.order_id}-{op.operation_id}"
+                
+                df_data.append(dict(
+                    Task=op.equipment_id,
+                    Start=start_datetime,
+                    Finish=end_datetime,
+                    Resource=resource_key
+                ))
+                # 为每个片段分配对应订单的颜色
+                colors[resource_key] = order_to_color[op.order_id]
         
         # 创建甘特图
         fig = ff.create_gantt(
