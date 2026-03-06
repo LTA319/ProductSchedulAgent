@@ -34,14 +34,12 @@ def init_session_state():
         st.session_state.data_loaded = False
 
 
-def load_and_validate_data(orders_file, processes_file, equipment_file):
+def load_and_validate_data(data_file):
     """
     加载并验证上传的数据文件
     
     Args:
-        orders_file: 订单文件
-        processes_file: 工艺路线文件
-        equipment_file: 设备文件
+        data_file: 包含订单、工艺路线、设备数据的 Excel 文件
         
     Returns:
         tuple: (success, message, orders, processes, equipment)
@@ -52,25 +50,15 @@ def load_and_validate_data(orders_file, processes_file, equipment_file):
     try:
         # 保存上传的文件到临时目录
         with tempfile.TemporaryDirectory() as temp_dir:
-            # 保存订单文件
-            orders_path = os.path.join(temp_dir, "orders.xlsx")
-            with open(orders_path, "wb") as f:
-                f.write(orders_file.getbuffer())
+            # 保存数据文件
+            data_path = os.path.join(temp_dir, "data.xlsx")
+            with open(data_path, "wb") as f:
+                f.write(data_file.getbuffer())
             
-            # 保存工艺路线文件
-            processes_path = os.path.join(temp_dir, "processes.xlsx")
-            with open(processes_path, "wb") as f:
-                f.write(processes_file.getbuffer())
-            
-            # 保存设备文件
-            equipment_path = os.path.join(temp_dir, "equipment.xlsx")
-            with open(equipment_path, "wb") as f:
-                f.write(equipment_file.getbuffer())
-            
-            # 解析数据
-            orders = parser.parse_orders(orders_path)
-            processes = parser.parse_processes(processes_path)
-            equipment = parser.parse_equipment(equipment_path)
+            # 从同一个文件的不同工作表解析数据
+            orders = parser.parse_orders(data_path)
+            processes = parser.parse_processes(data_path)
+            equipment = parser.parse_equipment(data_path)
             
             # 验证数据
             orders_validation = validator.validate_orders(orders)
@@ -140,36 +128,23 @@ def main():
     # 侧边栏 - 数据上传区
     with st.sidebar:
         st.header("📁 数据上传")
-        st.markdown("请上传以下三个数据文件：")
+        st.markdown("请上传包含订单、工艺路线、设备数据的 Excel 文件")
+        st.caption("文件应包含三个工作表：订单表、工艺路线表、设备表")
         
         # 文件上传组件
-        orders_file = st.file_uploader(
-            "订单数据 (orders.xlsx)", 
+        data_file = st.file_uploader(
+            "生产数据 (data.xlsx)", 
             type=['xlsx', 'xls'],
-            key='orders_file',
-            help="包含订单号、产品编码、数量、交期等信息"
-        )
-        
-        processes_file = st.file_uploader(
-            "工艺路线 (processes.xlsx)", 
-            type=['xlsx', 'xls'],
-            key='processes_file',
-            help="包含产品工艺路线、工序顺序、标准工时等信息"
-        )
-        
-        equipment_file = st.file_uploader(
-            "设备数据 (equipment.xlsx)", 
-            type=['xlsx', 'xls'],
-            key='equipment_file',
-            help="包含设备编号、可用时段、产能等信息"
+            key='data_file',
+            help="Excel 文件应包含三个工作表：订单表、工艺路线表、设备表"
         )
         
         # 加载数据按钮
-        if orders_file and processes_file and equipment_file:
+        if data_file:
             if st.button("📥 加载数据", type="primary", use_container_width=True):
                 with st.spinner("正在加载和验证数据..."):
                     success, message, orders, processes, equipment = load_and_validate_data(
-                        orders_file, processes_file, equipment_file
+                        data_file
                     )
                     
                     if success:
@@ -246,7 +221,8 @@ def main():
                         '工序编号': process.operation_id,
                         '工序名称': process.operation_name,
                         '工序顺序': process.sequence,
-                        '标准工时(小时)': f"{process.standard_time:.2f}",
+                        '标准工时(分钟)': f"{process.standard_time:.1f}",
+                        '换型时间(分钟)': f"{process.changeover_time:.1f}",
                         '所需设备': process.required_equipment,
                         '前置工序': process.predecessor or '-'
                     })
@@ -261,11 +237,12 @@ def main():
                 for equip in st.session_state.equipment:
                     equipment_data.append({
                         '设备编号': equip.equipment_id,
-                        '设备类型': equip.equipment_type,
-                        '可用开始': equip.available_start.strftime('%Y-%m-%d'),
-                        '可用结束': equip.available_end.strftime('%Y-%m-%d'),
+                        '状态': equip.status,
+                        '效率系数': f"{equip.efficiency:.2f}",
                         '产能(小时/天)': equip.capacity,
-                        '换产时间(小时)': equip.changeover_time
+                        '换型时间(分钟)': f"{equip.changeover_time:.1f}",
+                        '可用开始': equip.available_start.strftime('%Y-%m-%d'),
+                        '可用结束': equip.available_end.strftime('%Y-%m-%d')
                     })
                 df_equipment = pd.DataFrame(equipment_data)
                 st.dataframe(df_equipment, use_container_width=True, hide_index=True)
