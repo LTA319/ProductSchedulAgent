@@ -255,6 +255,53 @@ def main():
     if not st.session_state.data_loaded:
         st.info("请先上传并加载数据")
     else:
+        # 排程目标权重设置
+        st.subheader("排程目标设置")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            due_date_weight = st.slider(
+                "交期优先",
+                min_value=0.0,
+                max_value=2.0,
+                value=1.0,
+                step=0.1,
+                help="优先满足订单交期，减少延期"
+            )
+        
+        with col2:
+            utilization_weight = st.slider(
+                "设备利用率",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.5,
+                step=0.1,
+                help="提高设备使用效率"
+            )
+        
+        with col3:
+            changeover_weight = st.slider(
+                "最小换产",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.3,
+                step=0.1,
+                help="减少设备换产次数"
+            )
+        
+        with col4:
+            makespan_weight = st.slider(
+                "最小完工时间",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.2,
+                step=0.1,
+                help="缩短总完工时间"
+            )
+        
+        st.markdown("---")
+        
         col1, col2 = st.columns([3, 1])
         
         with col1:
@@ -270,11 +317,20 @@ def main():
                 # 执行排程计算
                 with st.spinner("🔄 正在执行排程计算，请稍候..."):
                     try:
+                        # 构建目标权重字典
+                        objective_weights = {
+                            'due_date': due_date_weight,
+                            'utilization': utilization_weight,
+                            'changeover': changeover_weight,
+                            'makespan': makespan_weight
+                        }
+                        
                         # 创建排程引擎
                         scheduler = Scheduler(
                             st.session_state.orders,
                             st.session_state.processes,
-                            st.session_state.equipment
+                            st.session_state.equipment,
+                            objective_weights=objective_weights
                         )
                         
                         # 执行排程

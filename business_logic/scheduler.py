@@ -17,7 +17,8 @@ class Scheduler:
         self, 
         orders: List[Order], 
         processes: List[Process], 
-        equipment: List[Equipment]
+        equipment: List[Equipment],
+        objective_weights: Dict[str, float] = None
     ):
         """
         初始化排程引擎
@@ -26,10 +27,23 @@ class Scheduler:
             orders: 订单列表
             processes: 工艺路线列表
             equipment: 设备列表
+            objective_weights: 目标权重字典，包含以下键：
+                - 'due_date': 交期优先权重（默认1.0）
+                - 'utilization': 设备利用率权重（默认0.5）
+                - 'changeover': 最小换产权重（默认0.3）
+                - 'makespan': 最小完工时间权重（默认0.2）
         """
         self.orders = orders
         self.processes = processes
         self.equipment = equipment
+        
+        # 设置目标权重（默认值）
+        self.objective_weights = objective_weights or {
+            'due_date': 1.0,      # 交期优先
+            'utilization': 0.5,   # 设备利用率
+            'changeover': 0.3,    # 最小换产
+            'makespan': 0.2       # 最小完工时间
+        }
         
         # 数据预处理
         self._preprocess_data()
@@ -135,6 +149,10 @@ class Scheduler:
         self.interval_vars = {}  # (order_id, operation_id, equipment_id) -> interval_var
         self.presence_vars = {}  # (order_id, operation_id, equipment_id) -> presence_var
         self.equipment_to_intervals = {}  # equipment_id -> list of interval_vars
+        self.changeover_vars = {}  # (equipment_id, i, j) -> changeover_bool_var (是否发生换产)
+        
+        # 记录每台设备上的工序列表（用于换产计算）
+        self.equipment_to_operations = {}  # equipment_id -> list of (order, process)
         
         # 为每个订单的每个工序创建决策变量
         for order, process in self.job_operations:
@@ -176,6 +194,11 @@ class Scheduler:
                 if equip.equipment_id not in self.equipment_to_intervals:
                     self.equipment_to_intervals[equip.equipment_id] = []
                 self.equipment_to_intervals[equip.equipment_id].append(interval_var)
+                
+                # 记录设备到工序的映射（用于换产计算）
+                if equip.equipment_id not in self.equipment_to_operations:
+                    self.equipment_to_operations[equip.equipment_id] = []
+                self.equipment_to_operations[equip.equipment_id].append((order, process, equip.equipment_id))
             
             # 约束：每个工序必须在恰好一台设备上执行
             presence_vars_list = [
@@ -185,7 +208,41 @@ class Scheduler:
             if presence_vars_list:
                 model.Add(sum(presence_vars_list) == 1)
         
+        # 创建换产变量（用于最小化换产次数）
+        self._create_changeover_vars(model)
+        
         return model
+    
+    def _create_changeover_vars(self, model):
+        """
+        创建换产变量
+        
+        对于每台设备上的每对工序，创建一个布尔变量表示是否发生换产
+        """
+        for equipment_id, operations in self.equipment_to_operations.items():
+            for i in range(len(operations)):
+                for j in range(i + 1, len(operations)):
+                    order_i, process_i, equip_i = operations[i]
+                    order_j, process_j, equip_j = operations[j]
+                    
+                    # 如果两个工序属于不同订单，则可能发生换产
+                    if order_i.order_id != order_j.order_id:
+                        # 创建换产布尔变量
+                        changeover_var = model.NewBoolVar(
+                            f'changeover_{equipment_id}_{i}_{j}'
+                        )
+                        self.changeover_vars[(equipment_id, i, j)] = changeover_var
+                        
+                        # 获取presence变量
+                        presence_i = self.presence_vars.get((order_i.order_id, process_i.operation_id, equipment_id))
+                        presence_j = self.presence_vars.get((order_j.order_id, process_j.operation_id, equipment_id))
+                        
+                        if presence_i and presence_j:
+                            # 如果两个工序都在这台设备上执行，则发生换产
+                            # changeover = presence_i AND presence_j
+                            model.Add(changeover_var >= presence_i + presence_j - 1)
+                            model.Add(changeover_var <= presence_i)
+                            model.Add(changeover_var <= presence_j)
     
     def add_constraints(self, model):
         """
@@ -252,20 +309,142 @@ class Scheduler:
     
     def set_objective(self, model):
         """
-        设置优化目标：最小化总完工时间（makespan）
+        设置多目标优化函数
+        
+        目标包括：
+        1. 优先交期：最小化延期惩罚
+        2. 设备利用率：最大化设备使用（最小化空闲时间）
+        3. 最小换产：最小化换产次数
+        4. 最小总完工时间：最小化makespan
         
         Args:
             model: CP-SAT 模型对象
         """
-        # 创建 makespan 变量：所有工序结束时间的最大值
-        self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
+        objective_terms = []
         
-        # makespan >= 所有工序的结束时间
-        for key, end_var in self.end_vars.items():
-            model.Add(self.makespan_var >= end_var)
+        # 1. 交期目标：最小化延期惩罚
+        if self.objective_weights.get('due_date', 0) > 0:
+            due_date_penalty = self._create_due_date_objective(model)
+            # 使用整数权重
+            weight = int(self.objective_weights['due_date'] * 10000)
+            if weight > 0:
+                objective_terms.append((due_date_penalty, weight))
         
-        # 最小化 makespan
-        model.Minimize(self.makespan_var)
+        # 2. 设备利用率目标：最小化makespan（间接提高利用率）
+        if self.objective_weights.get('utilization', 0) > 0:
+            # 创建 makespan 变量
+            if not hasattr(self, 'makespan_var'):
+                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
+                for key, end_var in self.end_vars.items():
+                    model.Add(self.makespan_var >= end_var)
+            
+            # 最小化makespan可以提高设备利用率
+            weight = int(self.objective_weights['utilization'] * 1)
+            if weight > 0:
+                objective_terms.append((self.makespan_var, weight))
+        
+        # 3. 最小换产目标
+        if self.objective_weights.get('changeover', 0) > 0 and self.changeover_vars:
+            # 创建总换产次数变量
+            total_changeovers = model.NewIntVar(0, len(self.changeover_vars), 'total_changeovers')
+            model.Add(total_changeovers == sum(self.changeover_vars.values()))
+            
+            weight = int(self.objective_weights['changeover'] * 1000)
+            if weight > 0:
+                objective_terms.append((total_changeovers, weight))
+        
+        # 4. 最小完工时间目标（makespan）
+        if self.objective_weights.get('makespan', 0) > 0:
+            if not hasattr(self, 'makespan_var'):
+                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
+                for key, end_var in self.end_vars.items():
+                    model.Add(self.makespan_var >= end_var)
+            
+            weight = int(self.objective_weights['makespan'] * 1)
+            if weight > 0:
+                objective_terms.append((self.makespan_var, weight))
+        
+        # 组合所有目标
+        if objective_terms:
+            # 构建加权线性表达式
+            # CP-SAT 需要使用 sum() 配合生成器表达式
+            objective_expr = 0
+            for var, coef in objective_terms:
+                objective_expr += var * coef
+            model.Minimize(objective_expr)
+        else:
+            # 如果没有设置任何权重，默认最小化makespan
+            if not hasattr(self, 'makespan_var'):
+                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
+                for key, end_var in self.end_vars.items():
+                    model.Add(self.makespan_var >= end_var)
+            model.Minimize(self.makespan_var)
+    
+    def _create_due_date_objective(self, model):
+        """
+        创建交期目标：最小化延期惩罚
+        
+        Returns:
+            延期惩罚变量
+        """
+        # 将交期转换为相对分钟数（从基准日期开始）
+        base_date = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        
+        tardiness_vars = []
+        
+        for order in self.orders:
+            # 计算订单的所有工序
+            if order.product_id not in self.product_to_processes:
+                continue
+            
+            # 找到订单的最后一个工序的结束时间
+            processes = self.product_to_processes[order.product_id]
+            if not processes:
+                continue
+            
+            # 获取所有工序的结束时间变量
+            order_end_vars = []
+            for process in processes:
+                key = (order.order_id, process.operation_id)
+                if key in self.end_vars:
+                    order_end_vars.append(self.end_vars[key])
+            
+            if not order_end_vars:
+                continue
+            
+            # 订单完工时间 = 所有工序结束时间的最大值
+            order_completion = model.NewIntVar(0, self.horizon, f'completion_{order.order_id}')
+            for end_var in order_end_vars:
+                model.Add(order_completion >= end_var)
+            
+            # 计算交期（转换为工作分钟）
+            # 简化：假设交期是从基准日期开始的天数
+            days_until_due = (order.due_date - base_date).days
+            # 转换为工作分钟（假设每天8小时工作）
+            due_time_minutes = days_until_due * 8 * 60
+            
+            # 创建延期变量：tardiness = max(0, completion - due_time)
+            tardiness = model.NewIntVar(0, self.horizon, f'tardiness_{order.order_id}')
+            model.Add(tardiness >= order_completion - due_time_minutes)
+            model.Add(tardiness >= 0)
+            
+            # 根据优先级和是否急单调整权重
+            weight = order.priority  # 优先级越小，权重越大
+            if order.is_urgent:
+                weight *= 2  # 急单加倍惩罚
+            
+            # 创建加权延期变量
+            weighted_tardiness = model.NewIntVar(0, self.horizon * weight, f'weighted_tardiness_{order.order_id}')
+            model.Add(weighted_tardiness == weight * tardiness)
+            tardiness_vars.append(weighted_tardiness)
+        
+        # 返回总延期惩罚
+        if tardiness_vars:
+            total_tardiness = model.NewIntVar(0, self.horizon * len(self.orders) * 10, 'total_tardiness')
+            model.Add(total_tardiness == sum(tardiness_vars))
+            return total_tardiness
+        else:
+            return model.NewIntVar(0, 0, 'zero_tardiness')
     
     def solve(self) -> ScheduleResult:
         """
