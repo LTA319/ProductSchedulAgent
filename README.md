@@ -54,16 +54,33 @@ ProductSchedulAgent/
 - **Hypothesis**：基于属性的测试框架
 - **Pytest**：单元测试框架
 
-## 安装说明
+## 快速开始
 
-### 1. 克隆项目
+### 方式一：使用启动脚本（推荐）
+
+**Windows:**
+```bash
+双击运行 run.bat
+```
+
+**Linux/Mac:**
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+启动脚本会自动完成环境配置、依赖安装和应用启动。详细说明请参考 [快速开始指南](QUICKSTART.md)。
+
+### 方式二：手动安装
+
+#### 1. 克隆项目
 
 ```bash
 git clone <repository-url>
 cd ProductSchedulAgent
 ```
 
-### 2. 创建虚拟环境
+#### 2. 创建虚拟环境
 
 **Windows:**
 ```bash
@@ -77,7 +94,7 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 3. 安装依赖
+#### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
@@ -95,23 +112,13 @@ streamlit run ui/app.py
 
 ### 数据格式要求
 
-#### 订单数据 (orders.xlsx)
+系统需要一个包含三个工作表的 Excel 文件：
 
-| 订单号 | 产品编码 | 数量 | 交期 | 优先级 |
-|--------|----------|------|------|--------|
-| ORD001 | PROD001  | 10   | 2026-03-15 | 5 |
+- **订单表**：订单号、产品编码、生产数量、承诺交期、优先级、是否急单
+- **工艺路线表**：产品编码、工序号、工序名称、工序顺序、单件标准工时（分钟）、可使用设备编号
+- **设备表**：设备编号、状态、每日工作小时
 
-#### 工艺路线数据 (processes.xlsx)
-
-| 产品编码 | 工序编号 | 工序名称 | 工序顺序 | 标准工时(h) | 所需设备类型 | 前置工序 |
-|----------|----------|----------|----------|-------------|--------------|----------|
-| PROD001  | OP001    | 粗加工   | 1        | 2.0         | 车床         | -        |
-
-#### 设备数据 (equipment.xlsx)
-
-| 设备编号 | 设备类型 | 可用开始时间 | 可用结束时间 | 产能上限(h/天) | 换产时间(h) |
-|----------|----------|--------------|--------------|----------------|-------------|
-| EQ001    | 车床     | 2026-03-01 08:00 | 2026-03-31 18:00 | 8 | 0.5 |
+详细的数据格式说明和示例请参考 [数据格式说明文档](docs/DATA_FORMAT.md)。
 
 ### 使用流程
 
@@ -123,6 +130,14 @@ streamlit run ui/app.py
    - 指标看板：查看关键性能指标
    - 详细数据：查看排程结果表格
 5. **导出结果**：下载排程结果为 Excel 或 CSV 格式
+
+## 文档
+
+- [快速开始指南](QUICKSTART.md) - 5分钟快速上手
+- [数据格式说明](docs/DATA_FORMAT.md) - 详细的数据格式要求和示例
+- [需求文档](.kiro/specs/production-scheduling-agent/requirements.md) - 系统需求规格
+- [设计文档](.kiro/specs/production-scheduling-agent/design.md) - 系统架构和设计
+- [任务列表](.kiro/specs/production-scheduling-agent/tasks.md) - 开发任务和进度
 
 ## 运行测试
 
