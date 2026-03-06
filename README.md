@@ -194,6 +194,42 @@ pytest --cov=data_layer --cov=business_logic --cov=ui tests/
 
 [待定]
 
+## 部署指南
+
+详细的部署和打包说明请参考 [部署指南](DEPLOYMENT.md)，包括：
+
+- 本地部署
+- Docker 容器化部署
+- 云平台部署（Streamlit Cloud、Heroku、AWS、Azure）
+- 打包为可执行文件
+- 内网部署配置
+
+### 快速打包
+
+**Windows:**
+```bash
+package.bat
+```
+
+**Linux/Mac:**
+```bash
+chmod +x package.sh
+./package.sh
+```
+
+### Docker 快速部署
+
+```bash
+# 构建镜像
+docker build -t production-scheduler:latest .
+
+# 运行容器
+docker run -p 8501:8501 production-scheduler:latest
+
+# 或使用 docker-compose
+docker-compose up -d
+```
+
 ## 联系方式
 
 [待定]
