@@ -141,7 +141,7 @@ def main():
         
         # 加载数据按钮
         if data_file:
-            if st.button("📥 加载数据", type="primary", use_container_width=True):
+            if st.button("📥 加载数据", type="primary", width='stretch'):
                 with st.spinner("正在加载和验证数据..."):
                     success, message, orders, processes, equipment = load_and_validate_data(
                         data_file
@@ -173,7 +173,7 @@ def main():
                 st.info(f"🔧 设备数: {len(st.session_state.equipment)}")
             
             # 清除数据按钮
-            if st.button("🗑️ 清除数据", use_container_width=True):
+            if st.button("🗑️ 清除数据", width='stretch'):
                 st.session_state.orders = None
                 st.session_state.processes = None
                 st.session_state.equipment = None
@@ -208,7 +208,7 @@ def main():
                         '是否急单': '是' if order.is_urgent else '否'
                     })
                 df_orders = pd.DataFrame(orders_data)
-                st.dataframe(df_orders, use_container_width=True, hide_index=True)
+                st.dataframe(df_orders, width='stretch', hide_index=True)
         
         with preview_tab2:
             if st.session_state.processes:
@@ -227,7 +227,7 @@ def main():
                         '前置工序': process.predecessor or '-'
                     })
                 df_processes = pd.DataFrame(processes_data)
-                st.dataframe(df_processes, use_container_width=True, hide_index=True)
+                st.dataframe(df_processes, width='stretch', hide_index=True)
         
         with preview_tab3:
             if st.session_state.equipment:
@@ -245,7 +245,7 @@ def main():
                         '可用结束': equip.available_end.strftime('%Y-%m-%d')
                     })
                 df_equipment = pd.DataFrame(equipment_data)
-                st.dataframe(df_equipment, use_container_width=True, hide_index=True)
+                st.dataframe(df_equipment, width='stretch', hide_index=True)
     
     st.markdown("---")
     
@@ -302,7 +302,7 @@ def main():
         
         st.markdown("---")
         
-        col1, col2 = st.columns([3, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
             st.markdown("点击下方按钮开始执行排程计算")
@@ -312,7 +312,7 @@ def main():
                 "开始排程", 
                 type="primary", 
                 disabled=not st.session_state.data_loaded,
-                use_container_width=True
+                width='stretch'
             ):
                 # 执行排程计算
                 with st.spinner("🔄 正在执行排程计算，请稍候..."):
@@ -384,6 +384,17 @@ def main():
                         st.session_state.schedule_result = None
                         st.session_state.metrics = None
         
+        with col3:
+            if st.button(
+                "清除结果",
+                disabled=st.session_state.schedule_result is None,
+                width='stretch'
+            ):
+                st.session_state.schedule_result = None
+                st.session_state.metrics = None
+                st.success("✅ 排程结果已清除")
+                st.rerun()
+        
         # 显示当前排程状态
         if st.session_state.schedule_result:
             st.info(f"✅ 已完成排程计算 - 状态: {st.session_state.schedule_result.status}")
@@ -410,7 +421,7 @@ def main():
                 gantt_fig = visualizer.generate_gantt_chart(st.session_state.schedule_result)
                 
                 # 显示甘特图（启用交互功能）
-                st.plotly_chart(gantt_fig, use_container_width=True, config={
+                st.plotly_chart(gantt_fig, width='stretch', config={
                     'scrollZoom': True,  # 启用滚轮缩放
                     'displayModeBar': True,  # 显示工具栏
                     'modeBarButtonsToAdd': ['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
@@ -458,7 +469,7 @@ def main():
                 
                 try:
                     utilization_fig = visualizer.generate_utilization_chart(st.session_state.metrics)
-                    st.plotly_chart(utilization_fig, use_container_width=True)
+                    st.plotly_chart(utilization_fig, width='stretch')
                 except Exception as e:
                     st.error(f"生成利用率图表时发生错误: {str(e)}")
                 
@@ -476,7 +487,7 @@ def main():
                 
                 df_utilization = pd.DataFrame(utilization_data)
                 df_utilization = df_utilization.sort_values('利用率', ascending=False)
-                st.dataframe(df_utilization, use_container_width=True, hide_index=True)
+                st.dataframe(df_utilization, width='stretch', hide_index=True)
             else:
                 st.warning("指标数据不可用")
         
@@ -518,7 +529,7 @@ def main():
                 if selected_equipment != '全部':
                     filtered_df = filtered_df[filtered_df['设备编号'] == selected_equipment]
                 
-                st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+                st.dataframe(filtered_df, width='stretch', hide_index=True)
                 
                 st.caption(f"共 {len(filtered_df)} 条记录（总计 {len(df_operations)} 条）")
             else:
@@ -555,7 +566,7 @@ def main():
                     data=excel_data,
                     file_name="排程结果.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    width='stretch'
                 )
                 
                 st.caption("包含订单号、工序、设备、时间等详细信息")
@@ -587,7 +598,7 @@ def main():
                     data=csv_data,
                     file_name="排程结果.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    width='stretch'
                 )
                 
                 st.caption("适用于进一步数据分析和处理")

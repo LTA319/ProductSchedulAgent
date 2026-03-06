@@ -142,7 +142,7 @@ class Visualizer:
         fig.update_layout(
             xaxis_title="时间",
             yaxis_title="设备",
-            height=max(400, len(set(op.equipment_id for op in schedule.operations)) * 50),
+            height=max(600, len(set(op.equipment_id for op in schedule.operations)) * 80),
             hovermode='closest',
             # 启用拖动和缩放
             dragmode='pan'

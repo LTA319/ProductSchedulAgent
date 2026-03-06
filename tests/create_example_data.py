@@ -34,8 +34,9 @@ def create_orders_sheet(writer):
     """创建订单表"""
     
     # 基准日期
-    base_date = datetime(2026, 3, 6)
-    
+    # base_date = datetime(2026, 3, 6)
+    base_date = datetime.today()
+
     # 订单数据
     orders_data = [
         # 订单号, 产品编码, 产品名称, 生产数量, 承诺交期, 优先级, 是否急单
