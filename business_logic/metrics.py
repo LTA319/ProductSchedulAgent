@@ -61,7 +61,7 @@ class MetricsCalculator:
         if not schedule.operations:
             return {}
         
-        # 计算每台设备的总工作时间
+        # 计算每台设备的总工作时间（小时）
         equipment_work_time: Dict[str, float] = {}
         
         for operation in schedule.operations:
@@ -70,17 +70,36 @@ class MetricsCalculator:
                 equipment_work_time[equipment_id] = 0.0
             equipment_work_time[equipment_id] += operation.duration
         
+        # 计算排程的时间跨度（天数）
+        if schedule.operations:
+            min_start_time = min(op.start_time for op in schedule.operations)
+            max_end_time = max(op.end_time for op in schedule.operations)
+            
+            # 计算跨越的天数（向上取整）
+            time_span_days = (max_end_time - min_start_time).days + 1
+        else:
+            time_span_days = 1
+        
         # 计算利用率
         utilization: Dict[str, float] = {}
-        makespan = self.calculate_makespan(schedule)
         
         for equipment_id, work_time in equipment_work_time.items():
-            if makespan > 0:
-                # 利用率 = (总工作时间 / 可用时间) × 100%
-                # 可用时间使用 makespan 作为参考
-                utilization[equipment_id] = (work_time / makespan) * 100.0
+            # 获取设备的每日工作时长
+            equipment = self.equipment_map.get(equipment_id)
+            if equipment:
+                daily_capacity = equipment.capacity  # 小时/天
+                # 可用工作时间 = 天数 × 每日工作时长
+                available_time = time_span_days * daily_capacity
+                
+                if available_time > 0:
+                    # 利用率 = (实际工作时间 / 可用工作时间) × 100%
+                    utilization[equipment_id] = (work_time / available_time) * 100.0
+                else:
+                    utilization[equipment_id] = 0.0
             else:
-                utilization[equipment_id] = 0.0
+                # 如果找不到设备信息，使用默认的8小时/天
+                available_time = time_span_days * 8.0
+                utilization[equipment_id] = (work_time / available_time) * 100.0 if available_time > 0 else 0.0
         
         # 对于没有分配任何工序的设备，利用率为0
         for equipment in self.equipment:

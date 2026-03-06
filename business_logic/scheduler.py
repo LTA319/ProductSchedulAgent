@@ -407,8 +407,13 @@ class Scheduler:
                 duration=duration_hours
             ))
         
-        # 获取 makespan（工作小时）
-        makespan = solver.Value(self.makespan_var) / 60.0 if hasattr(self, 'makespan_var') else 0.0
+        # 计算 makespan（日历时间跨度，小时）
+        if operations:
+            min_start_time = min(op.start_time for op in operations)
+            max_end_time = max(op.end_time for op in operations)
+            makespan = (max_end_time - min_start_time).total_seconds() / 3600.0
+        else:
+            makespan = 0.0
         
         # 确定求解状态
         status_str = 'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'
