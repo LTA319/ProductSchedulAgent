@@ -42,6 +42,7 @@ class Scheduler:
         - operation_to_process: 工序ID到工艺对象的映射
         - equipment_type_to_equipment: 设备类型到设备列表的映射
         - horizon: 时间范围（所有工序的总工时之和的上界）
+        - equipment_daily_capacity: 设备每日工作时长（分钟）
         """
         # 构建产品到工艺路线的映射
         self.product_to_processes: Dict[str, List[Process]] = {}
@@ -77,17 +78,33 @@ class Scheduler:
                 equipment_objs = [eq for eq in self.equipment if eq.equipment_id in equipment_ids]
                 self.equipment_group_to_equipment[equipment_str] = equipment_objs
         
-        # 计算时间范围（horizon）：所有订单的所有工序的总工时之和
-        # 这是一个保守的上界估计
-        total_time = 0.0
+        # 构建设备每日工作时长映射（分钟）
+        self.equipment_daily_capacity: Dict[str, float] = {}
+        for equip in self.equipment:
+            # capacity 是小时/天，转换为分钟/天
+            self.equipment_daily_capacity[equip.equipment_id] = equip.capacity * 60.0
+        
+        # 计算时间范围（horizon）：考虑设备工作时间限制
+        # 估算需要的工作天数
+        total_work_minutes = 0.0
         for order in self.orders:
             if order.product_id in self.product_to_processes:
                 for process in self.product_to_processes[order.product_id]:
-                    # standard_time 现在是分钟
-                    total_time += process.standard_time * order.quantity
+                    total_work_minutes += process.standard_time * order.quantity
         
-        # 时间单位已经是分钟，直接使用
-        self.horizon = int(total_time) + 10000  # 添加缓冲时间
+        # 假设平均每天可用工作时长（取所有设备的平均值）
+        if self.equipment_daily_capacity:
+            avg_daily_capacity = sum(self.equipment_daily_capacity.values()) / len(self.equipment_daily_capacity)
+        else:
+            avg_daily_capacity = 8 * 60  # 默认8小时/天
+        
+        # 估算需要的天数，并添加缓冲
+        estimated_days = (total_work_minutes / avg_daily_capacity) * 2  # 2倍缓冲
+        estimated_days = max(estimated_days, 30)  # 至少30天
+        
+        # horizon 以分钟为单位，表示日历时间（包含非工作时间）
+        # 假设每天24小时，但只有 capacity 小时是工作时间
+        self.horizon = int(estimated_days * 24 * 60)  # 转换为分钟
         self.time_scale = 1  # 时间缩放因子：1分钟 = 1单位
         
         # 构建订单-工序对列表（用于后续建模）
@@ -298,6 +315,37 @@ class Scheduler:
                 solve_time=solve_time
             )
     
+    def _work_minutes_to_datetime(self, work_minutes: float, equipment_id: str, base_date: datetime) -> datetime:
+        """
+        将工作分钟转换为实际日期时间（考虑每日工作时长，跳过非工作时间）
+        
+        Args:
+            work_minutes: 累计工作分钟数
+            equipment_id: 设备编号
+            base_date: 基准日期（排程开始日期）
+            
+        Returns:
+            实际日期时间
+        """
+        # 获取设备每日工作时长（分钟）
+        daily_capacity_minutes = self.equipment_daily_capacity.get(equipment_id, 8 * 60)
+        
+        # 计算是第几个工作日（从0开始）
+        work_day = int(work_minutes / daily_capacity_minutes)
+        
+        # 计算当天的工作分钟数（余数）
+        minutes_in_day = work_minutes % daily_capacity_minutes
+        
+        # 假设每天从 8:00 开始工作
+        work_start_hour = 8
+        
+        # 计算实际日期时间
+        result_date = base_date + timedelta(days=work_day)
+        result_datetime = result_date.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
+        result_datetime += timedelta(minutes=minutes_in_day)
+        
+        return result_datetime
+    
     def extract_solution(self, solver, solve_time: float, status) -> ScheduleResult:
         """
         从求解器提取排程结果
@@ -339,16 +387,17 @@ class Scheduler:
                 # 如果没有找到，使用第一个可用设备（fallback）
                 assigned_equipment = available_equipment[0].equipment_id
             
+            # 保持使用工作时间（分钟转小时），在可视化时再转换为日历时间
             operations.append(ScheduledOperation(
                 order_id=order.order_id,
                 operation_id=process.operation_id,
                 equipment_id=assigned_equipment or 'UNKNOWN',
-                start_time=float(start_time) / 60.0,  # 转换为小时用于显示
-                end_time=float(end_time) / 60.0,      # 转换为小时用于显示
-                duration=float(duration) / 60.0       # 转换为小时用于显示
+                start_time=float(start_time) / 60.0,  # 工作小时
+                end_time=float(end_time) / 60.0,      # 工作小时
+                duration=float(duration) / 60.0       # 工作小时
             ))
         
-        # 获取 makespan（转换为小时用于显示）
+        # 获取 makespan（工作小时）
         makespan = solver.Value(self.makespan_var) / 60.0 if hasattr(self, 'makespan_var') else 0.0
         
         # 确定求解状态

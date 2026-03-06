@@ -15,6 +15,50 @@ from data_layer.models import ScheduleResult
 class Visualizer:
     """可视化生成器类，用于生成排程结果的可视化图表"""
     
+    def __init__(self, equipment_list=None):
+        """
+        初始化可视化生成器
+        
+        Args:
+            equipment_list: 设备列表，用于获取每日工作时长信息
+        """
+        self.equipment_list = equipment_list or []
+        # 构建设备每日工作时长映射（小时）
+        self.equipment_daily_capacity = {}
+        for equip in self.equipment_list:
+            self.equipment_daily_capacity[equip.equipment_id] = equip.capacity
+    
+    def _work_hours_to_datetime(self, work_hours: float, equipment_id: str, base_date: datetime) -> datetime:
+        """
+        将工作小时转换为实际日期时间（考虑每日工作时长，跳过非工作时间）
+        
+        Args:
+            work_hours: 累计工作小时数
+            equipment_id: 设备编号
+            base_date: 基准日期（排程开始日期）
+            
+        Returns:
+            实际日期时间
+        """
+        # 获取设备每日工作时长（小时）
+        daily_capacity_hours = self.equipment_daily_capacity.get(equipment_id, 8.0)
+        
+        # 计算是第几个工作日（从0开始）
+        work_day = int(work_hours / daily_capacity_hours)
+        
+        # 计算当天的工作小时数（余数）
+        hours_in_day = work_hours % daily_capacity_hours
+        
+        # 假设每天从 8:00 开始工作
+        work_start_hour = 8
+        
+        # 计算实际日期时间
+        result_date = base_date + timedelta(days=work_day)
+        result_datetime = result_date.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
+        result_datetime += timedelta(hours=hours_in_day)
+        
+        return result_datetime
+    
     def generate_gantt_chart(self, schedule: ScheduleResult):
         """
         生成甘特图
@@ -59,9 +103,10 @@ class Visualizer:
         colors = {}
         for op in schedule.operations:
             resource_key = f"{op.order_id}-{op.operation_id}"
-            # 将小时数转换为日期时间
-            start_datetime = base_date + timedelta(hours=op.start_time)
-            end_datetime = base_date + timedelta(hours=op.end_time)
+            
+            # 将工作小时转换为实际日期时间（考虑每日工作时长）
+            start_datetime = self._work_hours_to_datetime(op.start_time, op.equipment_id, base_date)
+            end_datetime = self._work_hours_to_datetime(op.end_time, op.equipment_id, base_date)
             
             df_data.append(dict(
                 Task=op.equipment_id,

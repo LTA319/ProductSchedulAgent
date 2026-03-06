@@ -350,7 +350,7 @@ def main():
             
             try:
                 # 生成甘特图
-                visualizer = Visualizer()
+                visualizer = Visualizer(st.session_state.equipment)
                 gantt_fig = visualizer.generate_gantt_chart(st.session_state.schedule_result)
                 
                 # 显示甘特图（启用交互功能）
@@ -483,7 +483,7 @@ def main():
                 tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
                 tmp_file.close()  # 关闭文件句柄，Windows 需要这样做
                 
-                visualizer = Visualizer()
+                visualizer = Visualizer(st.session_state.equipment)
                 visualizer.export_schedule_to_excel(st.session_state.schedule_result, tmp_file.name)
                 
                 # 读取文件内容
@@ -515,7 +515,7 @@ def main():
                 tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w', encoding='utf-8-sig')
                 tmp_file.close()  # 关闭文件句柄，Windows 需要这样做
                 
-                visualizer = Visualizer()
+                visualizer = Visualizer(st.session_state.equipment)
                 visualizer.export_schedule_to_csv(st.session_state.schedule_result, tmp_file.name)
                 
                 # 读取文件内容
