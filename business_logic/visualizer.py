@@ -185,7 +185,7 @@ class Visualizer:
         if not schedule.operations:
             # 创建空的DataFrame
             df = pd.DataFrame(columns=[
-                '订单号', '工序编号', '设备编号', '开始时间', '结束时间', '持续时间'
+                '订单号', '工序编号', '设备编号', '开始时间(小时)', '结束时间(小时)', '持续时间(小时)'
             ])
         else:
             # 构建数据
@@ -195,9 +195,9 @@ class Visualizer:
                     '订单号': op.order_id,
                     '工序编号': op.operation_id,
                     '设备编号': op.equipment_id,
-                    '开始时间': op.start_time,
-                    '结束时间': op.end_time,
-                    '持续时间': op.duration
+                    '开始时间(小时)': round(op.start_time, 2),
+                    '结束时间(小时)': round(op.end_time, 2),
+                    '持续时间(小时)': round(op.duration, 2)
                 })
             
             df = pd.DataFrame(data)
@@ -216,7 +216,7 @@ class Visualizer:
         if not schedule.operations:
             # 创建空的DataFrame
             df = pd.DataFrame(columns=[
-                '订单号', '工序编号', '设备编号', '开始时间', '结束时间', '持续时间'
+                '订单号', '工序编号', '设备编号', '开始时间(小时)', '结束时间(小时)', '持续时间(小时)'
             ])
         else:
             # 构建数据
@@ -226,9 +226,9 @@ class Visualizer:
                     '订单号': op.order_id,
                     '工序编号': op.operation_id,
                     '设备编号': op.equipment_id,
-                    '开始时间': op.start_time,
-                    '结束时间': op.end_time,
-                    '持续时间': op.duration
+                    '开始时间(小时)': round(op.start_time, 2),
+                    '结束时间(小时)': round(op.end_time, 2),
+                    '持续时间(小时)': round(op.duration, 2)
                 })
             
             df = pd.DataFrame(data)

@@ -22,7 +22,7 @@ class Order:
     product_id: str        # 产品编码
     quantity: int          # 数量
     due_date: datetime     # 交期
-    priority: int          # 优先级 (1-5, 5最高)
+    priority: int          # 优先级 (1最高, 数字越小优先级越高)
     is_urgent: bool = False  # 是否紧急
 
 
@@ -33,8 +33,9 @@ class Process:
     operation_id: str            # 工序编号
     operation_name: str          # 工序名称
     sequence: int                # 工序顺序
-    standard_time: float         # 标准工时（小时）
+    standard_time: float         # 单件标准工时（分钟）
     required_equipment: str      # 所需设备类型
+    changeover_time: float = 0.0 # 换型时间（分钟）
     predecessor: Optional[str] = None   # 前置工序
 
 
@@ -43,10 +44,12 @@ class Equipment:
     """设备数据模型"""
     equipment_id: str           # 设备编号
     equipment_type: str         # 设备类型
+    status: str                 # 状态（可用/不可用）
+    efficiency: float           # 效率系数（0-1之间，1表示100%效率）
     available_start: datetime   # 可用开始时间
     available_end: datetime     # 可用结束时间
     capacity: float             # 产能上限（小时/天）
-    changeover_time: float      # 换产时间（小时）
+    changeover_time: float = 0.0  # 换产时间（分钟）
 
 
 @dataclass

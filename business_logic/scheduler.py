@@ -66,18 +66,29 @@ class Scheduler:
                 self.equipment_type_to_equipment[equip.equipment_type] = []
             self.equipment_type_to_equipment[equip.equipment_type].append(equip)
         
+        # 构建设备组映射：将 "M01,M02" 这样的字符串映射到对应的设备列表
+        self.equipment_group_to_equipment: Dict[str, List[Equipment]] = {}
+        for process in self.processes:
+            equipment_str = process.required_equipment
+            if equipment_str not in self.equipment_group_to_equipment:
+                # 解析设备列表
+                equipment_ids = [eid.strip() for eid in equipment_str.split(',')]
+                # 查找对应的设备对象
+                equipment_objs = [eq for eq in self.equipment if eq.equipment_id in equipment_ids]
+                self.equipment_group_to_equipment[equipment_str] = equipment_objs
+        
         # 计算时间范围（horizon）：所有订单的所有工序的总工时之和
         # 这是一个保守的上界估计
         total_time = 0.0
         for order in self.orders:
             if order.product_id in self.product_to_processes:
                 for process in self.product_to_processes[order.product_id]:
+                    # standard_time 现在是分钟
                     total_time += process.standard_time * order.quantity
         
-        # 时间离散化：转换为整数分钟（乘以60），向上取整
-        # 使用分钟作为时间单位以保持精度
-        self.horizon = int(total_time * 60) + 10000  # 添加缓冲时间
-        self.time_scale = 60  # 时间缩放因子：1小时 = 60分钟
+        # 时间单位已经是分钟，直接使用
+        self.horizon = int(total_time) + 10000  # 添加缓冲时间
+        self.time_scale = 1  # 时间缩放因子：1分钟 = 1单位
         
         # 构建订单-工序对列表（用于后续建模）
         self.job_operations: List[Tuple[Order, Process]] = []
@@ -119,12 +130,13 @@ class Scheduler:
             end_var = model.NewIntVar(0, self.horizon, f'end_{order.order_id}_{process.operation_id}')
             self.end_vars[key] = end_var
             
-            # 工序持续时间（标准工时，转换为分钟）
-            duration = int(process.standard_time * self.time_scale)
+            # 工序持续时间（标准工时，单位：分钟）
+            # 考虑设备效率：实际时间 = 标准时间 / 效率
+            duration = int(process.standard_time)
             
             # 为每个可用设备创建区间变量
-            # 获取可以执行此工序的设备列表
-            available_equipment = self.equipment_type_to_equipment.get(process.required_equipment, [])
+            # 获取可以执行此工序的设备列表（使用设备组映射）
+            available_equipment = self.equipment_group_to_equipment.get(process.required_equipment, [])
             
             for equip in available_equipment:
                 # 创建一个布尔变量表示是否在此设备上执行
@@ -314,7 +326,7 @@ class Scheduler:
             
             # 找到分配的设备
             assigned_equipment = None
-            available_equipment = self.equipment_type_to_equipment.get(process.required_equipment, [])
+            available_equipment = self.equipment_group_to_equipment.get(process.required_equipment, [])
             
             for equip in available_equipment:
                 presence_key = (order.order_id, process.operation_id, equip.equipment_id)
@@ -331,13 +343,13 @@ class Scheduler:
                 order_id=order.order_id,
                 operation_id=process.operation_id,
                 equipment_id=assigned_equipment or 'UNKNOWN',
-                start_time=float(start_time) / self.time_scale,  # 转换回小时
-                end_time=float(end_time) / self.time_scale,      # 转换回小时
-                duration=float(duration) / self.time_scale       # 转换回小时
+                start_time=float(start_time) / 60.0,  # 转换为小时用于显示
+                end_time=float(end_time) / 60.0,      # 转换为小时用于显示
+                duration=float(duration) / 60.0       # 转换为小时用于显示
             ))
         
-        # 获取 makespan（转换回小时）
-        makespan = solver.Value(self.makespan_var) / self.time_scale if hasattr(self, 'makespan_var') else 0.0
+        # 获取 makespan（转换为小时用于显示）
+        makespan = solver.Value(self.makespan_var) / 60.0 if hasattr(self, 'makespan_var') else 0.0
         
         # 确定求解状态
         status_str = 'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'

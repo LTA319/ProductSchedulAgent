@@ -101,12 +101,19 @@ class DataParser:
                 operation_id = str(row['工序号']).strip()
                 sequence = int(row['工序顺序'])
                 
-                # 标准工时从分钟转换为小时
-                standard_time = float(row['单件标准工时（分钟）']) / 60.0
+                # 单件标准工时（分钟）
+                standard_time = float(row['单件标准工时（分钟）'])
                 
-                # 解析可使用设备（取第一个设备类型）
+                # 换型时间（分钟），如果列不存在则默认为0
+                changeover_time = 0.0
+                if '换型时间（分钟）' in row and pd.notna(row['换型时间（分钟）']):
+                    changeover_time = float(row['换型时间（分钟）'])
+                
+                # 解析可使用设备（保留完整的设备列表作为设备类型标识）
                 equipment_str = str(row['可使用设备编号']).strip()
-                required_equipment = equipment_str.split(',')[0].strip()
+                # 使用完整的设备列表字符串作为 required_equipment
+                # 这样相同设备组的工序可以共享设备池
+                required_equipment = equipment_str
                 
                 # 记录产品的工序顺序
                 if product_id not in process_map:
@@ -125,6 +132,7 @@ class DataParser:
                     sequence=sequence,
                     standard_time=standard_time,
                     required_equipment=required_equipment,
+                    changeover_time=changeover_time,
                     predecessor=predecessor
                 )
                 processes.append(process)
@@ -166,19 +174,33 @@ class DataParser:
                 if pd.isna(row['设备编号']):
                     continue
                 
+                # 读取状态
+                status = str(row['状态']).strip()
+                
                 # 跳过不可用设备
-                if str(row['状态']).strip() != '可用':
+                if status != '可用':
                     continue
                 
                 # 每日工作小时
                 capacity = float(row['每日工作小时'])
                 
-                # 换型时间（假设为0，因为示例数据中没有此字段）
+                # 效率系数，如果列不存在则默认为1.0（100%效率）
+                efficiency = 1.0
+                if '效率系数' in row and pd.notna(row['效率系数']):
+                    efficiency = float(row['效率系数'])
+                
+                # 换型时间（分钟），如果列不存在则默认为0
                 changeover_time = 0.0
+                if '换型时间（分钟）' in row and pd.notna(row['换型时间（分钟）']):
+                    changeover_time = float(row['换型时间（分钟）'])
+                
+                equipment_id = str(row['设备编号']).strip()
                 
                 equipment = Equipment(
-                    equipment_id=str(row['设备编号']).strip(),
-                    equipment_type=str(row['设备编号']).strip(),  # 使用设备编号作为类型
+                    equipment_id=equipment_id,
+                    equipment_type=equipment_id,  # 设备类型就是设备编号本身
+                    status=status,
+                    efficiency=efficiency,
                     available_start=base_date,
                     available_end=base_date.replace(year=2027),  # 假设一年可用期
                     capacity=capacity,

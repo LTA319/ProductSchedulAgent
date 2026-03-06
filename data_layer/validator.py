@@ -47,9 +47,9 @@ class DataValidator:
             elif order.due_date < datetime.now():
                 warnings.append(f"订单 {order.order_id}: 交期已过期")
             
-            # 检查优先级
-            if not (1 <= order.priority <= 5):
-                errors.append(f"订单 {order.order_id}: 优先级必须在1-5之间，当前值: {order.priority}")
+            # 检查优先级（1最高，数字越小优先级越高）
+            if order.priority < 1:
+                errors.append(f"订单 {order.order_id}: 优先级必须大于等于1，当前值: {order.priority}")
         
         # 检查订单号唯一性
         order_ids = [o.order_id for o in orders]
@@ -211,10 +211,20 @@ class DataValidator:
             warnings.append(f"以下产品有工艺路线但没有订单: {unused_processes}")
         
         # 检查工艺路线中要求的设备是否都存在
-        required_equipment = {process.required_equipment for process in processes}
-        missing_equipment = required_equipment - equipment_ids
+        # required_equipment 现在可能是逗号分隔的设备列表（如 "M01,M02"）
+        required_equipment_groups = {process.required_equipment for process in processes}
+        missing_equipment = []
+        
+        for equipment_group in required_equipment_groups:
+            # 解析设备列表
+            equipment_ids_in_group = [eid.strip() for eid in equipment_group.split(',')]
+            # 检查每个设备是否存在
+            for eq_id in equipment_ids_in_group:
+                if eq_id not in equipment_ids:
+                    missing_equipment.append(eq_id)
+        
         if missing_equipment:
-            errors.append(f"以下设备在工艺路线中被要求但不存在: {missing_equipment}")
+            errors.append(f"以下设备在工艺路线中被要求但不存在: {set(missing_equipment)}")
         
         is_valid = len(errors) == 0
         return ValidationResult(is_valid=is_valid, errors=errors, warnings=warnings)
