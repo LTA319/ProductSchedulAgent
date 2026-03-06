@@ -5,6 +5,7 @@
 """
 
 from typing import Dict, List
+from datetime import datetime, timedelta
 from data_layer.models import ScheduleResult, Order, Equipment
 
 
@@ -30,14 +31,19 @@ class MetricsCalculator:
             schedule: 排程结果
             
         Returns:
-            总完工时间（小时）
+            总完工时间（小时，从排程开始到最后完工的时间跨度）
         """
         if not schedule.operations:
             return 0.0
         
-        # 总完工时间是所有工序结束时间的最大值
+        # 找到最早的开始时间和最晚的结束时间
+        min_start_time = min(op.start_time for op in schedule.operations)
         max_end_time = max(op.end_time for op in schedule.operations)
-        return max_end_time
+        
+        # 计算时间跨度（小时）
+        time_span = (max_end_time - min_start_time).total_seconds() / 3600.0
+        
+        return time_span
     
     def calculate_equipment_utilization(
         self, 
@@ -102,7 +108,7 @@ class MetricsCalculator:
             return 100.0
         
         # 计算每个订单的完工时间
-        order_completion_time: Dict[str, float] = {}
+        order_completion_time: Dict[str, datetime] = {}
         
         for operation in schedule.operations:
             order_id = operation.order_id
@@ -110,10 +116,8 @@ class MetricsCalculator:
                 order_completion_time[order_id] = operation.end_time
             else:
                 # 订单完工时间是其所有工序结束时间的最大值
-                order_completion_time[order_id] = max(
-                    order_completion_time[order_id],
-                    operation.end_time
-                )
+                if operation.end_time > order_completion_time[order_id]:
+                    order_completion_time[order_id] = operation.end_time
         
         # 统计按时完成的订单数量
         on_time_count = 0
@@ -121,18 +125,12 @@ class MetricsCalculator:
         for order in orders:
             if order.order_id in order_completion_time:
                 completion_time = order_completion_time[order.order_id]
-                # 将交期转换为相对时间（小时）
-                # 简化处理：假设排程从时间0开始，交期以小时为单位
-                # 在实际应用中，需要根据 available_start 计算相对时间
-                # 这里我们假设 due_date 已经是相对于排程开始的小时数
-                # 由于 due_date 是 datetime 对象，我们需要一个参考时间
-                # 为了简化，我们假设如果完工时间小于等于一个合理的时间窗口，就算按时
-                # 更准确的实现需要传入排程开始时间
+                # 比较完工时间和交期
+                # 将交期时间设置为当天的工作结束时间（假设16:00）
+                due_datetime = order.due_date.replace(hour=16, minute=0, second=0, microsecond=0)
                 
-                # 简化实现：假设所有订单都有足够的时间窗口
-                # 实际应该比较 completion_time 和 due_date 的相对时间差
-                # 这里我们暂时认为所有完成的订单都按时完成
-                on_time_count += 1
+                if completion_time <= due_datetime:
+                    on_time_count += 1
         
         # 计算交期达成率
         if len(orders) > 0:

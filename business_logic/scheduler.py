@@ -5,6 +5,7 @@
 """
 
 from typing import List, Dict, Tuple
+from datetime import datetime, timedelta
 from data_layer.models import Order, Process, Equipment, ScheduleResult
 from ortools.sat.python import cp_model
 
@@ -387,14 +388,23 @@ class Scheduler:
                 # 如果没有找到，使用第一个可用设备（fallback）
                 assigned_equipment = available_equipment[0].equipment_id
             
-            # 保持使用工作时间（分钟转小时），在可视化时再转换为日历时间
+            # 使用基准日期（今天8点）
+            base_date = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+            
+            # 将工作分钟转换为实际日期时间
+            start_datetime = self._work_minutes_to_datetime(float(start_time), assigned_equipment or 'UNKNOWN', base_date)
+            end_datetime = self._work_minutes_to_datetime(float(end_time), assigned_equipment or 'UNKNOWN', base_date)
+            
+            # 计算工作小时数
+            duration_hours = float(duration) / 60.0
+            
             operations.append(ScheduledOperation(
                 order_id=order.order_id,
                 operation_id=process.operation_id,
                 equipment_id=assigned_equipment or 'UNKNOWN',
-                start_time=float(start_time) / 60.0,  # 工作小时
-                end_time=float(end_time) / 60.0,      # 工作小时
-                duration=float(duration) / 60.0       # 工作小时
+                start_time=start_datetime,
+                end_time=end_datetime,
+                duration=duration_hours
             ))
         
         # 获取 makespan（工作小时）

@@ -58,9 +58,9 @@ class ScheduledOperation:
     order_id: str          # 订单号
     operation_id: str      # 工序编号
     equipment_id: str      # 分配设备
-    start_time: float      # 开始时间（相对时间，单位：小时）
-    end_time: float        # 结束时间
-    duration: float        # 持续时间
+    start_time: datetime   # 开始时间（日期时间）
+    end_time: datetime     # 结束时间（日期时间）
+    duration: float        # 持续时间（工作小时）
 
 
 @dataclass

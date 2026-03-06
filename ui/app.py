@@ -435,8 +435,8 @@ def main():
                         '订单号': op.order_id,
                         '工序编号': op.operation_id,
                         '设备编号': op.equipment_id,
-                        '开始时间(小时)': f"{op.start_time:.2f}",
-                        '结束时间(小时)': f"{op.end_time:.2f}",
+                        '开始时间': op.start_time.strftime('%Y-%m-%d %H:%M'),
+                        '结束时间': op.end_time.strftime('%Y-%m-%d %H:%M'),
                         '持续时间(小时)': f"{op.duration:.2f}"
                     })
                 

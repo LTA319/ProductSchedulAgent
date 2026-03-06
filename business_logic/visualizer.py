@@ -28,14 +28,13 @@ class Visualizer:
         for equip in self.equipment_list:
             self.equipment_daily_capacity[equip.equipment_id] = equip.capacity
     
-    def _split_operation_by_days(self, op, equipment_id: str, base_date: datetime):
+    def _split_operation_by_days(self, op, equipment_id: str):
         """
         将跨天的工序拆分为多个每日片段
         
         Args:
-            op: ScheduledOperation 对象
+            op: ScheduledOperation 对象（start_time 和 end_time 已经是 datetime）
             equipment_id: 设备编号
-            base_date: 基准日期
             
         Returns:
             拆分后的片段列表 [(start_datetime, end_datetime), ...]
@@ -44,31 +43,25 @@ class Visualizer:
         work_start_hour = 8
         
         segments = []
-        current_work_hours = op.start_time
-        remaining_hours = op.duration
+        current_datetime = op.start_time
+        end_datetime = op.end_time
         
-        while remaining_hours > 0:
-            # 计算当前在第几天
-            current_day = int(current_work_hours / daily_capacity_hours)
-            # 计算当天已经使用的工作小时
-            hours_used_today = current_work_hours % daily_capacity_hours
-            # 计算当天还剩多少工作时间
-            hours_left_today = daily_capacity_hours - hours_used_today
+        while current_datetime < end_datetime:
+            # 当天工作结束时间
+            day_end = current_datetime.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
+            day_end += timedelta(hours=daily_capacity_hours)
             
-            # 本次片段的工作时长
-            segment_duration = min(remaining_hours, hours_left_today)
+            # 本片段的结束时间：取当天结束时间和任务结束时间的较小值
+            segment_end = min(day_end, end_datetime)
             
-            # 计算实际日期时间
-            segment_date = base_date + timedelta(days=current_day)
-            segment_start = segment_date.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
-            segment_start += timedelta(hours=hours_used_today)
-            segment_end = segment_start + timedelta(hours=segment_duration)
+            segments.append((current_datetime, segment_end))
             
-            segments.append((segment_start, segment_end))
-            
-            # 更新剩余时间和当前位置
-            remaining_hours -= segment_duration
-            current_work_hours += segment_duration
+            # 如果还有剩余，移动到下一天的开始时间
+            if segment_end < end_datetime:
+                next_day = current_datetime + timedelta(days=1)
+                current_datetime = next_day.replace(hour=work_start_hour, minute=0, second=0, microsecond=0)
+            else:
+                break
         
         return segments
     
@@ -92,9 +85,6 @@ class Visualizer:
             )
             return fig
         
-        # 使用基准日期时间（今天）
-        base_date = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
-        
         # 准备甘特图数据
         df_data = []
         
@@ -114,11 +104,10 @@ class Visualizer:
         
         # 构建甘特图数据，并为每个Resource分配颜色
         colors = {}
-        segment_counter = {}  # 用于为同一工序的不同片段生成唯一ID
         
         for op in schedule.operations:
             # 将跨天工序拆分为多个每日片段
-            segments = self._split_operation_by_days(op, op.equipment_id, base_date)
+            segments = self._split_operation_by_days(op, op.equipment_id)
             
             # 为每个片段创建甘特图条目
             for idx, (start_datetime, end_datetime) in enumerate(segments):
@@ -250,7 +239,7 @@ class Visualizer:
         if not schedule.operations:
             # 创建空的DataFrame
             df = pd.DataFrame(columns=[
-                '订单号', '工序编号', '设备编号', '开始时间(小时)', '结束时间(小时)', '持续时间(小时)'
+                '订单号', '工序编号', '设备编号', '开始时间', '结束时间', '持续时间(小时)'
             ])
         else:
             # 构建数据
@@ -260,8 +249,8 @@ class Visualizer:
                     '订单号': op.order_id,
                     '工序编号': op.operation_id,
                     '设备编号': op.equipment_id,
-                    '开始时间(小时)': round(op.start_time, 2),
-                    '结束时间(小时)': round(op.end_time, 2),
+                    '开始时间': op.start_time.strftime('%Y-%m-%d %H:%M'),
+                    '结束时间': op.end_time.strftime('%Y-%m-%d %H:%M'),
                     '持续时间(小时)': round(op.duration, 2)
                 })
             
@@ -281,7 +270,7 @@ class Visualizer:
         if not schedule.operations:
             # 创建空的DataFrame
             df = pd.DataFrame(columns=[
-                '订单号', '工序编号', '设备编号', '开始时间(小时)', '结束时间(小时)', '持续时间(小时)'
+                '订单号', '工序编号', '设备编号', '开始时间', '结束时间', '持续时间(小时)'
             ])
         else:
             # 构建数据
@@ -291,8 +280,8 @@ class Visualizer:
                     '订单号': op.order_id,
                     '工序编号': op.operation_id,
                     '设备编号': op.equipment_id,
-                    '开始时间(小时)': round(op.start_time, 2),
-                    '结束时间(小时)': round(op.end_time, 2),
+                    '开始时间': op.start_time.strftime('%Y-%m-%d %H:%M'),
+                    '结束时间': op.end_time.strftime('%Y-%m-%d %H:%M'),
                     '持续时间(小时)': round(op.duration, 2)
                 })
             
