@@ -237,7 +237,7 @@ class Scheduler:
                         presence_i = self.presence_vars.get((order_i.order_id, process_i.operation_id, equipment_id))
                         presence_j = self.presence_vars.get((order_j.order_id, process_j.operation_id, equipment_id))
                         
-                        if presence_i and presence_j:
+                        if presence_i is not None and presence_j is not None:
                             # 如果两个工序都在这台设备上执行，则发生换产
                             # changeover = presence_i AND presence_j
                             model.Add(changeover_var >= presence_i + presence_j - 1)
@@ -320,64 +320,56 @@ class Scheduler:
         Args:
             model: CP-SAT 模型对象
         """
-        objective_terms = []
+        # 始终创建 makespan 变量
+        if not hasattr(self, 'makespan_var'):
+            self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
+            for key, end_var in self.end_vars.items():
+                model.Add(self.makespan_var >= end_var)
+        
+        # 检查是否有任何非零权重
+        has_objectives = any(self.objective_weights.get(key, 0) > 0 for key in 
+                            ['due_date', 'utilization', 'changeover', 'makespan'])
+        
+        if not has_objectives:
+            # 如果所有权重都是0，默认最小化makespan
+            model.Minimize(self.makespan_var)
+            return
+        
+        # 构建目标函数的各个部分
+        objective_parts = []
         
         # 1. 交期目标：最小化延期惩罚
-        if self.objective_weights.get('due_date', 0) > 0:
+        due_date_weight = self.objective_weights.get('due_date', 0)
+        if due_date_weight > 0:
             due_date_penalty = self._create_due_date_objective(model)
-            # 使用整数权重
-            weight = int(self.objective_weights['due_date'] * 10000)
-            if weight > 0:
-                objective_terms.append((due_date_penalty, weight))
+            weight = int(due_date_weight * 10000)
+            objective_parts.append(weight * due_date_penalty)
         
         # 2. 设备利用率目标：最小化makespan（间接提高利用率）
-        if self.objective_weights.get('utilization', 0) > 0:
-            # 创建 makespan 变量
-            if not hasattr(self, 'makespan_var'):
-                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
-                for key, end_var in self.end_vars.items():
-                    model.Add(self.makespan_var >= end_var)
-            
-            # 最小化makespan可以提高设备利用率
-            weight = int(self.objective_weights['utilization'] * 1)
-            if weight > 0:
-                objective_terms.append((self.makespan_var, weight))
+        utilization_weight = self.objective_weights.get('utilization', 0)
+        if utilization_weight > 0:
+            weight = int(utilization_weight * 1)
+            objective_parts.append(weight * self.makespan_var)
         
         # 3. 最小换产目标
-        if self.objective_weights.get('changeover', 0) > 0 and self.changeover_vars:
+        changeover_weight = self.objective_weights.get('changeover', 0)
+        if changeover_weight > 0 and self.changeover_vars:
             # 创建总换产次数变量
             total_changeovers = model.NewIntVar(0, len(self.changeover_vars), 'total_changeovers')
             model.Add(total_changeovers == sum(self.changeover_vars.values()))
-            
-            weight = int(self.objective_weights['changeover'] * 1000)
-            if weight > 0:
-                objective_terms.append((total_changeovers, weight))
+            weight = int(changeover_weight * 1000)
+            objective_parts.append(weight * total_changeovers)
         
         # 4. 最小完工时间目标（makespan）
-        if self.objective_weights.get('makespan', 0) > 0:
-            if not hasattr(self, 'makespan_var'):
-                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
-                for key, end_var in self.end_vars.items():
-                    model.Add(self.makespan_var >= end_var)
-            
-            weight = int(self.objective_weights['makespan'] * 1)
-            if weight > 0:
-                objective_terms.append((self.makespan_var, weight))
+        makespan_weight = self.objective_weights.get('makespan', 0)
+        if makespan_weight > 0:
+            weight = int(makespan_weight * 1)
+            objective_parts.append(weight * self.makespan_var)
         
         # 组合所有目标
-        if objective_terms:
-            # 构建加权线性表达式
-            # CP-SAT 需要使用 sum() 配合生成器表达式
-            objective_expr = 0
-            for var, coef in objective_terms:
-                objective_expr += var * coef
-            model.Minimize(objective_expr)
+        if objective_parts:
+            model.Minimize(sum(objective_parts))
         else:
-            # 如果没有设置任何权重，默认最小化makespan
-            if not hasattr(self, 'makespan_var'):
-                self.makespan_var = model.NewIntVar(0, self.horizon, 'makespan')
-                for key, end_var in self.end_vars.items():
-                    model.Add(self.makespan_var >= end_var)
             model.Minimize(self.makespan_var)
     
     def _create_due_date_objective(self, model):
