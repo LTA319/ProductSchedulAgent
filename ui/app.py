@@ -376,11 +376,15 @@ def main():
                 visualizer = Visualizer()
                 gantt_fig = visualizer.generate_gantt_chart(st.session_state.schedule_result)
                 
-                # 显示甘特图
-                st.plotly_chart(gantt_fig, use_container_width=True)
+                # 显示甘特图（启用交互功能）
+                st.plotly_chart(gantt_fig, use_container_width=True, config={
+                    'scrollZoom': True,  # 启用滚轮缩放
+                    'displayModeBar': True,  # 显示工具栏
+                    'modeBarButtonsToAdd': ['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+                })
                 
                 st.markdown("---")
-                st.caption("💡 提示：甘特图展示了每台设备上的工序安排，不同颜色代表不同订单")
+                st.caption("💡 提示：甘特图展示了每台设备上的工序安排，不同颜色代表不同订单。可以拖动、缩放查看详细信息")
                 
             except Exception as e:
                 st.error(f"生成甘特图时发生错误: {str(e)}")

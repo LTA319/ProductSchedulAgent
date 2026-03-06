@@ -5,6 +5,7 @@
 """
 
 from typing import Dict
+from datetime import datetime, timedelta
 import pandas as pd
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
@@ -34,6 +35,9 @@ class Visualizer:
             )
             return fig
         
+        # 使用基准日期时间（今天）
+        base_date = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        
         # 准备甘特图数据
         df_data = []
         
@@ -55,10 +59,14 @@ class Visualizer:
         colors = {}
         for op in schedule.operations:
             resource_key = f"{op.order_id}-{op.operation_id}"
+            # 将小时数转换为日期时间
+            start_datetime = base_date + timedelta(hours=op.start_time)
+            end_datetime = base_date + timedelta(hours=op.end_time)
+            
             df_data.append(dict(
                 Task=op.equipment_id,
-                Start=op.start_time,
-                Finish=op.end_time,
+                Start=start_datetime,
+                Finish=end_datetime,
                 Resource=resource_key
             ))
             # 为每个Resource分配对应订单的颜色
@@ -78,10 +86,20 @@ class Visualizer:
         
         # 更新布局
         fig.update_layout(
-            xaxis_title="时间（小时）",
+            xaxis_title="时间",
             yaxis_title="设备",
             height=max(400, len(set(op.equipment_id for op in schedule.operations)) * 50),
-            hovermode='closest'
+            hovermode='closest',
+            # 启用拖动和缩放
+            dragmode='pan'
+        )
+        
+        # 更新 x 轴格式，显示日期和时间，不倾斜
+        fig.update_xaxes(
+            tickformat='%m-%d %H:%M',
+            tickangle=0,  # 不倾斜
+            # 启用范围滑块，方便查看长时间轴
+            rangeslider_visible=False
         )
         
         return fig
