@@ -74,8 +74,10 @@ class Scheduler:
                 for process in self.product_to_processes[order.product_id]:
                     total_time += process.standard_time * order.quantity
         
-        # 时间离散化：转换为整数小时，向上取整
-        self.horizon = int(total_time) + 1000  # 添加缓冲时间
+        # 时间离散化：转换为整数分钟（乘以60），向上取整
+        # 使用分钟作为时间单位以保持精度
+        self.horizon = int(total_time * 60) + 10000  # 添加缓冲时间
+        self.time_scale = 60  # 时间缩放因子：1小时 = 60分钟
         
         # 构建订单-工序对列表（用于后续建模）
         self.job_operations: List[Tuple[Order, Process]] = []
@@ -117,8 +119,8 @@ class Scheduler:
             end_var = model.NewIntVar(0, self.horizon, f'end_{order.order_id}_{process.operation_id}')
             self.end_vars[key] = end_var
             
-            # 工序持续时间（标准工时，转换为整数）
-            duration = int(process.standard_time)
+            # 工序持续时间（标准工时，转换为分钟）
+            duration = int(process.standard_time * self.time_scale)
             
             # 为每个可用设备创建区间变量
             # 获取可以执行此工序的设备列表
@@ -204,7 +206,7 @@ class Scheduler:
         # 3. 工序时间约束：结束时间 = 开始时间 + 标准工时
         for order, process in self.job_operations:
             key = (order.order_id, process.operation_id)
-            duration = int(process.standard_time)
+            duration = int(process.standard_time * self.time_scale)
             
             if key in self.start_vars and key in self.end_vars:
                 model.Add(self.end_vars[key] == self.start_vars[key] + duration)
@@ -329,13 +331,13 @@ class Scheduler:
                 order_id=order.order_id,
                 operation_id=process.operation_id,
                 equipment_id=assigned_equipment or 'UNKNOWN',
-                start_time=float(start_time),
-                end_time=float(end_time),
-                duration=float(duration)
+                start_time=float(start_time) / self.time_scale,  # 转换回小时
+                end_time=float(end_time) / self.time_scale,      # 转换回小时
+                duration=float(duration) / self.time_scale       # 转换回小时
             ))
         
-        # 获取 makespan
-        makespan = solver.Value(self.makespan_var) if hasattr(self, 'makespan_var') else 0.0
+        # 获取 makespan（转换回小时）
+        makespan = solver.Value(self.makespan_var) / self.time_scale if hasattr(self, 'makespan_var') else 0.0
         
         # 确定求解状态
         status_str = 'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'
