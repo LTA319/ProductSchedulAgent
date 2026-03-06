@@ -131,8 +131,8 @@ class Scheduler:
             self.end_vars[key] = end_var
             
             # 工序持续时间（标准工时，单位：分钟）
-            # 考虑设备效率：实际时间 = 标准时间 / 效率
-            duration = int(process.standard_time)
+            # 实际时间 = 单件标准工时 × 订单数量
+            duration = int(process.standard_time * order.quantity)
             
             # 为每个可用设备创建区间变量
             # 获取可以执行此工序的设备列表（使用设备组映射）
@@ -215,10 +215,10 @@ class Scheduler:
             if intervals:
                 model.AddNoOverlap(intervals)
         
-        # 3. 工序时间约束：结束时间 = 开始时间 + 标准工时
+        # 3. 工序时间约束：结束时间 = 开始时间 + 标准工时 × 订单数量
         for order, process in self.job_operations:
             key = (order.order_id, process.operation_id)
-            duration = int(process.standard_time * self.time_scale)
+            duration = int(process.standard_time * order.quantity * self.time_scale)
             
             if key in self.start_vars and key in self.end_vars:
                 model.Add(self.end_vars[key] == self.start_vars[key] + duration)
